@@ -1,0 +1,507 @@
+import { logger } from "@infra/logger";
+import { sanitizeUnknown } from "@infra/sanitize";
+import { getExtractorRegistry } from "@server/extractors/registry";
+import { getAllJobUrls } from "@server/repositories/jobs";
+import * as settingsRepo from "@server/repositories/settings";
+import { asyncPool } from "@server/utils/async-pool";
+import {
+  normalizeLocationMatchStrictness,
+  normalizeLocationSearchScope,
+} from "@shared/location-preferences.js";
+import {
+  formatCountryLabel,
+  isSourceAllowedForCountry,
+  normalizeCountryKey,
+} from "@shared/location-support.js";
+import { normalizeStringArray } from "@shared/normalize-string-array.js";
+import {
+  matchesRequestedCity,
+  matchesRequestedCountry,
+  resolveSearchCities,
+  shouldApplyStrictCityFilter,
+} from "@shared/search-cities.js";
+import type { CreateJobInput, PipelineConfig } from "@shared/types";
+import { type CrawlSource, progressHelpers, updateProgress } from "../progress";
+
+const DISCOVERY_CONCURRENCY = 3;
+
+type DiscoveryTaskResult = {
+  discoveredJobs: CreateJobInput[];
+  sourceErrors: string[];
+};
+
+type DiscoveryImportResult = {
+  created: number;
+  skipped: number;
+};
+
+type DiscoverySourceTask = {
+  source: CrawlSource;
+  termsTotal?: number;
+  detail: string;
+  run: () => Promise<DiscoveryTaskResult>;
+};
+
+function parseBlockedCompanyKeywords(raw: string | undefined): string[] {
+  if (!raw) return [];
+  try {
+    const parsed = JSON.parse(raw);
+    if (!Array.isArray(parsed)) return [];
+    return normalizeStringArray(
+      parsed.filter((value): value is string => typeof value === "string"),
+    );
+  } catch {
+    return [];
+  }
+}
+
+function isBlockedEmployer(
+  employer: string | null | undefined,
+  blockedKeywordsLowerCase: string[],
+): boolean {
+  if (!employer) return false;
+  if (blockedKeywordsLowerCase.length === 0) return false;
+  const normalizedEmployer = employer.toLowerCase();
+  return blockedKeywordsLowerCase.some((keyword) =>
+    normalizedEmployer.includes(keyword),
+  );
+}
+
+function parseWorkplaceTypes(
+  raw: string | undefined,
+): Array<"remote" | "hybrid" | "onsite"> {
+  if (!raw) return [];
+  try {
+    const parsed = JSON.parse(raw);
+    if (!Array.isArray(parsed)) return [];
+    return parsed.filter(
+      (value): value is "remote" | "hybrid" | "onsite" =>
+        value === "remote" || value === "hybrid" || value === "onsite",
+    );
+  } catch {
+    return [];
+  }
+}
+
+function matchesSelectedLocations(args: {
+  job: CreateJobInput;
+  selectedCountry: string;
+  requestedCities: string[];
+  matchStrictness: "exact_only" | "flexible";
+}): boolean {
+  const { job, selectedCountry, requestedCities, matchStrictness } = args;
+  if (!selectedCountry) return true;
+
+  const countryMatches = matchesRequestedCountry(
+    job.location ?? undefined,
+    selectedCountry,
+  );
+  if (!countryMatches) return false;
+  if (requestedCities.length === 0) return true;
+
+  const cityMatches = requestedCities.some((requestedCity) => {
+    const strict = shouldApplyStrictCityFilter(requestedCity, selectedCountry);
+    if (!strict) return true;
+    return matchesRequestedCity(job.location, requestedCity);
+  });
+
+  if (cityMatches) return true;
+  return matchStrictness === "flexible";
+}
+
+function filterJobsByLocationPreferences(args: {
+  jobs: CreateJobInput[];
+  selectedCountry: string;
+  requestedCities: string[];
+  workplaceTypes: Array<"remote" | "hybrid" | "onsite">;
+  searchScope:
+    | "selected_only"
+    | "selected_plus_remote_worldwide"
+    | "remote_worldwide_prioritize_selected";
+  matchStrictness: "exact_only" | "flexible";
+}): CreateJobInput[] {
+  const {
+    jobs,
+    selectedCountry,
+    requestedCities,
+    workplaceTypes,
+    searchScope,
+    matchStrictness,
+  } = args;
+
+  if (!selectedCountry) return jobs;
+
+  const allowRemoteWorldwide =
+    workplaceTypes.includes("remote") && searchScope !== "selected_only";
+
+  return jobs.filter((job) => {
+    if (
+      matchesSelectedLocations({
+        job,
+        selectedCountry,
+        requestedCities,
+        matchStrictness,
+      })
+    ) {
+      return true;
+    }
+
+    if (allowRemoteWorldwide && job.isRemote) {
+      return true;
+    }
+
+    return false;
+  });
+}
+
+function filterDiscoveredJobs(args: {
+  jobs: CreateJobInput[];
+  selectedCountry: string;
+  requestedCities: string[];
+  workplaceTypes: Array<"remote" | "hybrid" | "onsite">;
+  searchScope:
+    | "selected_only"
+    | "selected_plus_remote_worldwide"
+    | "remote_worldwide_prioritize_selected";
+  matchStrictness: "exact_only" | "flexible";
+  blockedKeywordsLowerCase: string[];
+}): {
+  filteredJobs: CreateJobInput[];
+  locationFilteredOutCount: number;
+  blockedFilteredOutCount: number;
+} {
+  const locationFilteredJobs = filterJobsByLocationPreferences({
+    jobs: args.jobs,
+    selectedCountry: args.selectedCountry,
+    requestedCities: args.requestedCities,
+    workplaceTypes: args.workplaceTypes,
+    searchScope: args.searchScope,
+    matchStrictness: args.matchStrictness,
+  });
+  const filteredJobs = locationFilteredJobs.filter(
+    (job) => !isBlockedEmployer(job.employer, args.blockedKeywordsLowerCase),
+  );
+
+  return {
+    filteredJobs,
+    locationFilteredOutCount: args.jobs.length - locationFilteredJobs.length,
+    blockedFilteredOutCount: locationFilteredJobs.length - filteredJobs.length,
+  };
+}
+
+export async function discoverJobsStep(args: {
+  mergedConfig: PipelineConfig;
+  shouldCancel?: () => boolean;
+  onDiscoveredJobs?: (
+    jobs: CreateJobInput[],
+  ) => Promise<DiscoveryImportResult> | DiscoveryImportResult;
+}): Promise<{
+  discoveredJobs: CreateJobInput[];
+  sourceErrors: string[];
+  imported: DiscoveryImportResult;
+}> {
+  logger.info("Running discovery step");
+
+  const discoveredJobs: CreateJobInput[] = [];
+  const sourceErrors: string[] = [];
+
+  const settings = await settingsRepo.getAllSettings();
+  const registry = await getExtractorRegistry();
+
+  const searchTermsSetting = settings.searchTerms;
+  let searchTerms: string[] = [];
+
+  if (searchTermsSetting) {
+    searchTerms = JSON.parse(searchTermsSetting) as string[];
+  } else {
+    const defaultSearchTermsEnv =
+      process.env.JOBSPY_SEARCH_TERMS || "web developer";
+    searchTerms = defaultSearchTermsEnv
+      .split("|")
+      .map((term) => term.trim())
+      .filter(Boolean);
+  }
+
+  const selectedCountry = normalizeCountryKey(
+    settings.jobspyCountryIndeed ?? "",
+  );
+  const workplaceTypes = parseWorkplaceTypes(settings.workplaceTypes);
+  const searchScope = normalizeLocationSearchScope(
+    settings.locationSearchScope,
+  );
+  const matchStrictness = normalizeLocationMatchStrictness(
+    settings.locationMatchStrictness,
+  );
+  const requestedCities = resolveSearchCities({
+    single: settings.searchCities ?? settings.jobspyLocation,
+  });
+  const blockedCompanyKeywords = parseBlockedCompanyKeywords(
+    settings.blockedCompanyKeywords,
+  );
+  const blockedKeywordsLowerCase = blockedCompanyKeywords.map((value) =>
+    value.toLowerCase(),
+  );
+  const compatibleSources = selectedCountry
+    ? args.mergedConfig.sources.filter((source) =>
+        isSourceAllowedForCountry(source, selectedCountry),
+      )
+    : args.mergedConfig.sources;
+  let existingJobUrlsPromise: Promise<string[]> | null = null;
+  const getExistingJobUrls = (): Promise<string[]> => {
+    if (!existingJobUrlsPromise) {
+      existingJobUrlsPromise = getAllJobUrls();
+    }
+    return existingJobUrlsPromise;
+  };
+  const skippedSources = args.mergedConfig.sources.filter(
+    (source) => !compatibleSources.includes(source),
+  );
+
+  if (selectedCountry && skippedSources.length > 0) {
+    logger.info("Skipping incompatible sources for selected country", {
+      step: "discover-jobs",
+      country: selectedCountry,
+      countryLabel: formatCountryLabel(selectedCountry),
+      requestedSources: args.mergedConfig.sources,
+      skippedSources,
+    });
+  }
+
+  if (
+    selectedCountry &&
+    args.mergedConfig.sources.length > 0 &&
+    compatibleSources.length === 0
+  ) {
+    throw new Error(
+      `No compatible sources for selected country: ${formatCountryLabel(selectedCountry)}`,
+    );
+  }
+
+  const groupedByManifest = new Map<
+    string,
+    { sources: string[]; detail: string; termsTotal?: number }
+  >();
+
+  for (const source of compatibleSources) {
+    const manifest = registry.manifestBySource.get(source);
+    if (!manifest) {
+      sourceErrors.push(`${source}: extractor manifest not registered`);
+      continue;
+    }
+
+    const existing = groupedByManifest.get(manifest.id);
+    if (existing) {
+      existing.sources.push(source);
+      continue;
+    }
+
+    groupedByManifest.set(manifest.id, {
+      sources: [source],
+      termsTotal: searchTerms.length,
+      detail: `${manifest.displayName}: fetching jobs...`,
+    });
+  }
+
+  const sourceTasks: DiscoverySourceTask[] = [];
+
+  for (const [manifestId, grouped] of groupedByManifest) {
+    const manifest = registry.manifests.get(manifestId);
+    if (!manifest) continue;
+
+    sourceTasks.push({
+      source: manifest.id,
+      termsTotal: grouped.termsTotal,
+      detail:
+        grouped.sources.length > 1
+          ? `${manifest.displayName}: ${grouped.sources.join(", ")}...`
+          : grouped.detail,
+      run: async () => {
+        const filteredSettings = Object.fromEntries(
+          Object.entries(settings).filter(
+            ([, value]) =>
+              typeof value === "string" || typeof value === "undefined",
+          ),
+        ) as Record<string, string | undefined>;
+
+        const result = await manifest.run({
+          source: grouped.sources[0],
+          selectedSources: grouped.sources,
+          settings: filteredSettings,
+          searchTerms,
+          selectedCountry,
+          getExistingJobUrls,
+          shouldCancel: args.shouldCancel,
+          onProgress: (event) => {
+            progressHelpers.crawlingUpdate({
+              source: manifest.id,
+              termsProcessed: event.termsProcessed,
+              termsTotal: event.termsTotal,
+              listPagesProcessed: event.listPagesProcessed,
+              listPagesTotal: event.listPagesTotal,
+              jobCardsFound: event.jobCardsFound,
+              jobPagesEnqueued: event.jobPagesEnqueued,
+              jobPagesSkipped: event.jobPagesSkipped,
+              jobPagesProcessed: event.jobPagesProcessed,
+              phase: event.phase,
+              currentUrl: event.currentUrl,
+            });
+
+            if (event.detail) {
+              updateProgress({
+                step: "crawling",
+                detail: event.detail,
+              });
+            }
+          },
+        });
+
+        if (!result.success) {
+          return {
+            discoveredJobs: [],
+            sourceErrors: [
+              `${manifest.displayName || manifest.id}: ${result.error ?? "unknown error"} (sources: ${grouped.sources.join(",")})`,
+            ],
+          };
+        }
+
+        return {
+          discoveredJobs: result.jobs,
+          sourceErrors: [],
+        };
+      },
+    });
+  }
+
+  const totalSources = sourceTasks.length;
+  let completedSources = 0;
+  let locationFilteredOutCount = 0;
+  let blockedFilteredOutCount = 0;
+  const imported = { created: 0, skipped: 0 };
+
+  progressHelpers.startCrawling(totalSources);
+
+  if (args.shouldCancel?.()) {
+    return { discoveredJobs, sourceErrors, imported };
+  }
+
+  const sourceResults = await asyncPool({
+    items: sourceTasks,
+    concurrency: DISCOVERY_CONCURRENCY,
+    shouldStop: args.shouldCancel,
+    onTaskStarted: (sourceTask) => {
+      progressHelpers.startSource(
+        sourceTask.source,
+        completedSources,
+        totalSources,
+        {
+          termsTotal: sourceTask.termsTotal,
+          detail: sourceTask.detail,
+        },
+      );
+    },
+    onTaskSettled: () => {
+      completedSources += 1;
+      progressHelpers.completeSource(completedSources, totalSources);
+    },
+    task: async (sourceTask) => {
+      try {
+        const result = await sourceTask.run();
+        const filtered = filterDiscoveredJobs({
+          jobs: result.discoveredJobs,
+          selectedCountry,
+          requestedCities,
+          workplaceTypes,
+          searchScope,
+          matchStrictness,
+          blockedKeywordsLowerCase,
+        });
+
+        locationFilteredOutCount += filtered.locationFilteredOutCount;
+        blockedFilteredOutCount += filtered.blockedFilteredOutCount;
+
+        if (
+          args.onDiscoveredJobs &&
+          filtered.filteredJobs.length > 0 &&
+          !args.shouldCancel?.()
+        ) {
+          const importResult = await args.onDiscoveredJobs(filtered.filteredJobs);
+          imported.created += importResult.created;
+          imported.skipped += importResult.skipped;
+        }
+
+        return {
+          discoveredJobs: filtered.filteredJobs,
+          sourceErrors: result.sourceErrors,
+        };
+      } catch (error) {
+        logger.warn("Discovery source task failed", {
+          sourceTask: sourceTask.source,
+          error: sanitizeUnknown(error),
+        });
+
+        return {
+          discoveredJobs: [],
+          sourceErrors: [
+            `${sourceTask.source}: ${error instanceof Error ? error.message : "unknown error"}`,
+          ],
+        };
+      }
+    },
+  });
+
+  for (const sourceResult of sourceResults) {
+    discoveredJobs.push(...sourceResult.discoveredJobs);
+    sourceErrors.push(...sourceResult.sourceErrors);
+  }
+
+  if (locationFilteredOutCount > 0) {
+    logger.info(
+      "Dropped discovered jobs that did not satisfy location preferences",
+      {
+        step: "discover-jobs",
+        droppedCount: locationFilteredOutCount,
+        selectedCountry,
+        requestedCities,
+        searchScope,
+        matchStrictness,
+        allowRemoteWorldwide:
+          workplaceTypes.includes("remote") && searchScope !== "selected_only",
+      },
+    );
+  }
+
+  if (blockedFilteredOutCount > 0) {
+    const blockedCompanyKeywordsPreview = blockedCompanyKeywords.slice(0, 10);
+    const blockedCompanyKeywordsTruncated =
+      blockedCompanyKeywordsPreview.length < blockedCompanyKeywords.length;
+
+    logger.info("Dropped discovered jobs matching blocked company keywords", {
+      step: "discover-jobs",
+      droppedCount: blockedFilteredOutCount,
+      blockedKeywordCount: blockedCompanyKeywords.length,
+      blockedCompanyKeywordsPreview,
+      blockedCompanyKeywordsTruncated,
+    });
+
+    logger.debug("Full blocked company keywords used for filtering", {
+      step: "discover-jobs",
+      blockedCompanyKeywords,
+    });
+  }
+
+  if (args.shouldCancel?.()) {
+    return { discoveredJobs, sourceErrors, imported };
+  }
+
+  if (discoveredJobs.length === 0 && sourceErrors.length > 0) {
+    throw new Error(`All sources failed: ${sourceErrors.join("; ")}`);
+  }
+
+  if (sourceErrors.length > 0) {
+    logger.warn("Some discovery sources failed", { sourceErrors });
+  }
+
+  progressHelpers.crawlingComplete(discoveredJobs.length);
+
+  return { discoveredJobs, sourceErrors, imported };
+}

@@ -1,0 +1,28 @@
+{
+  "capturedAt": "2026-04-19T08:11:04.696Z",
+  "cookieCount": 3,
+  "cookies": [
+    {
+      "domain": "startup.jobs",
+      "name": "ahoy_visit",
+      "path": "/",
+      "secure": true,
+      "value": "d81762f6-2bb8-43c8-aba9-082c55516eeb"
+    },
+    {
+      "domain": "startup.jobs",
+      "name": "_startupjobs_session",
+      "path": "/",
+      "secure": true,
+      "value": "WUT3%2BIHg6K7oVppc94bZ1EK28gCQjMdnHlSvKGkqQzxDMvZ2L%2BQN5pWgKwabshYel%2BJaIulLqn0lH4bLkkykNHZ9Soz1UE%2BRF2zClWRYlbjjPrV4F1YR6YMmKVbKmoYcEj9qMZo2JUwnDa6OFjR0y8H1YapZ43oFvSASTENWqF2fYqIl9ZtTicszMK3KlJv01V%2BThl3sjGNN0iLu8k3D3HovlJm0v1R7OOWgCHGd2ERtNrR%2FsrcenGFXA7g1CDv1jTkfo4gvAKRbZL3HQt4h2pec3FCgGypBZUSIip6gYZwsN68RIv7CWEdB5KJNh1bN08w%3D--WueXA0ji9uid8zc2--k9AKspxtWoa0VyH%2BDQDNdw%3D%3D"
+    },
+    {
+      "domain": "startup.jobs",
+      "name": "ahoy_visitor",
+      "path": "/",
+      "secure": true,
+      "value": "02b0f90c-0733-4847-bcf0-4a92b50f3189"
+    }
+  ],
+  "url": "https://startup.jobs/?loc=Preston%2C+Lancashire%2C+United+Kingdom&q=Software&latlng=53.759%2C-2.699&since=30d&page=2"
+}
