@@ -1,197 +1,160 @@
-<div align="center">
+# CareerTwin
 
-# Job<span>Ops</span>
-
-**One search across every board. One click to tailor your CV. One place to track it all.**
-
-Your ironman suit for job hunting. You still apply to every job yourself. JobOps just makes you ten times faster.
-
-<br>
-
-<a href="https://trendshift.io/repositories/22756" target="_blank"><img src="https://trendshift.io/api/badge/repositories/22756" alt="DaKheera47%2Fjob-ops | Trendshift" style="width: 250px; height: 55px;" width="250" height="55"/></a>
-
-[![Stars](https://img.shields.io/github/stars/DaKheera47/job-ops?style=social)](https://github.com/DaKheera47/job-ops)
-[![GHCR](https://img.shields.io/badge/docker-ghcr.io-blue?logo=docker&logoColor=white)](https://github.com/DaKheera47/job-ops/pkgs/container/job-ops)
-[![Release](https://github.com/DaKheera47/job-ops/actions/workflows/ghcr.yml/badge.svg)](https://github.com/DaKheera47/job-ops/actions/workflows/ghcr.yml)
-[![Contributors](https://img.shields.io/github/contributors-anon/dakheera47/job-ops)](https://github.com/DaKheera47/job-ops/graphs/contributors)
-
-<br>
-
-800+ users · 4,000+ job searches run · #3 on GitHub Trending for TypeScript
-
-<br>
-
-<img width="1200" height="600" alt="JobOps Dashboard" src="https://github.com/user-attachments/assets/14fdc392-0e96-43be-bc1f-cf819ab2afc4" />
-
-</div>
-
----
-
-## Repository Apps
-
-This repository currently contains two app areas:
+CareerTwin is a monorepo with two main apps:
 
 - `JobOps`
-  The main job search orchestration and tracking workspace in the repo root.
-- `INTERVAI`
-  The mock interview simulator under `ai-interview-simulator/`, with AI-generated questions, answer feedback, and camera-based delivery checks.
+  A job search, CV tailoring, scoring, and application tracking app.
+- `IntervAI`
+  An interview practice app with AI-generated questions, answer feedback, and delivery analysis.
 
-## What is JobOps?
+## Repository Structure
 
-JobOps searches LinkedIn, Indeed, Glassdoor and 10+ job boards from one screen, rewrites your CV for each role, scores your fit, checks visa sponsorship status, and tracks every application in one place.
+- `orchestrator/` - JobOps frontend and backend
+- `ai-interview-simulator/` - IntervAI frontend and backend
+- `shared/` - shared types, schemas, and utilities
+- `extractors/` - job-source extractors
+- `docs-site/` - documentation site
+- `scripts/` - repo utility scripts
 
-It does not auto-apply. Recruiters can tell when applications are automated and it gets you blacklisted. JobOps gives you the speed without sacrificing quality.
+## Core Functionality
 
-<div align="center">
+### JobOps
 
-https://github.com/user-attachments/assets/ec5bc249-aad5-41f2-b1ff-f7b3b6e6f7b8
+- Search jobs from multiple sources in one place
+- Score jobs against a user profile
+- Generate tailored resume drafts and PDFs
+- Track jobs through discovered, ready, applied, and in-progress states
+- Store user settings, search terms, pipeline runs, and generated artifacts
+- Optional Gmail integration for post-application tracking
 
-</div>
+### IntervAI
 
----
+- Run mock interview sessions
+- Generate and present interview questions
+- Record answers and analyze delivery
+- Show structured feedback and metrics
 
-## Quick Start
+## Main Dependencies
 
-Prefer a guided walkthrough? Follow the [Self-Hosting Guide](https://jobops.dakheera47.com/docs/getting-started/self-hosting).
+### General
+
+- Node.js 22
+- npm
+- Docker and Docker Compose for the easiest local setup
+
+### JobOps
+
+- Vite
+- React
+- TypeScript
+- Express
+- better-sqlite3 / SQLite
+- Drizzle ORM
+- Tailwind CSS
+
+### IntervAI
+
+- React + Vite frontend
+- Python backend with requirements in `ai-interview-simulator/backend/requirements.txt`
+
+## Data Storage
+
+JobOps stores application data on the server side, not in cookies.
+
+- Main app data is stored in SQLite
+- Local default database path: `data/jobs.db`
+- In Docker, app data is stored through the mounted data directory
+- Auth session records are persisted in the database
+- The browser may keep short-lived auth/session tokens in `sessionStorage`
+
+## Environment Setup
+
+Create a `.env` file from `.env.example` and fill in the values you need.
+
+Common settings include:
+
+- LLM provider and API key
+- Reactive Resume API settings
+- Gmail OAuth credentials
+- extractor credentials such as Adzuna or UKVisaJobs
+- `TECTONIC_BIN` if LaTeX PDF rendering is used
+
+## Quick Start With Docker
 
 ```bash
-git clone https://github.com/DaKheera47/job-ops.git
-cd job-ops
+git clone <repo-url>
+cd Boolean
+cp .env.example .env
 docker compose up -d
 ```
 
-Open `http://localhost:3005` and follow the onboarding wizard. You'll be searching in under 10 minutes.
+Open:
 
----
+- JobOps: `http://localhost:3005`
 
-## How It Works
+If your local setup is using the Vite dev server instead of Docker, JobOps may run on `http://localhost:5173`.
 
-| Step | What happens |
-|------|-------------|
-| **Search** | Scrapes 10+ job boards for roles matching your criteria |
-| **Score** | AI ranks each job 0-100 against your profile |
-| **Tailor** | Generates a rewritten CV matched to each job description |
-| **Export** | Creates a polished PDF locally, or via [Reactive Resume](https://rxresu.me) |
-| **Track** | Connects to Gmail and auto-detects interviews, offers, and rejections |
+## Local Development
 
----
+### Install dependencies
 
-## Supported Job Boards
+```bash
+npm install
+```
 
-| Platform | Focus |
-|----------|-------|
-| LinkedIn | Global |
-| Indeed | Global |
-| Glassdoor | Global |
-| Adzuna | Multi-country API |
-| Hiring Cafe | Global |
-| startup.jobs | Startup/remote roles |
-| Working Nomads | Remote-only |
-| Gradcracker | STEM/Grads (UK) |
-| UK Visa Jobs | Sponsorship (UK) |
-| Golang Jobs | Go developers |
+### Run JobOps
 
-Custom extractors can be added via TypeScript. See the [extractor docs](https://jobops.dakheera47.com/docs/extractors/overview).
+```bash
+npm --workspace orchestrator run dev
+```
 
----
+Typical local ports:
 
-## Post-Application Tracking
+- frontend: `5173`
+- backend: `3001`
 
-Connect your Gmail and JobOps watches for recruiter replies automatically.
+### Run IntervAI frontend
 
-- *"We'd like to invite you to interview..."* → Status updates to **Interviewing**
-- *"Unfortunately we won't be progressing..."* → Status updates to **Rejected**
+```bash
+npm --prefix ai-interview-simulator/frontend install
+npm --prefix ai-interview-simulator/frontend run dev
+```
 
-No manual updates. No spreadsheets. See the [tracking docs](https://jobops.dakheera47.com/docs/features/post-application-tracking) for setup.
+### Run IntervAI backend
 
----
+```bash
+cd ai-interview-simulator/backend
+python -m venv venv
+source venv/bin/activate
+pip install -r requirements.txt
+python run.py
+```
 
-## AI Providers
+## Build Commands
 
-JobOps works with the model provider you already use:
+### JobOps client build
 
-- Codex (local app-server in Docker, authenticated with `codex login`)
-- OpenAI
-- Google Gemini
-- OpenRouter
-- Any OpenAI-compatible endpoint (Ollama, LM Studio, etc.)
+```bash
+npm --workspace orchestrator run build:client
+```
 
----
+### Type checks
 
-## Cloud
+```bash
+npm run check:types:shared
+npm --workspace orchestrator run check:types
+```
 
-Don't want to self-host? JobOps Cloud gives you your own hosted instance with nothing to install.
+## Notes
 
-<div align="center">
-
-| | BYOK | Zero Setup |
-|---|:---:|:---:|
-| **Price** | £20/month | £30/month |
-| **All features** | ✓ | ✓ |
-| **Your own instance** | ✓ | ✓ |
-| **Managed updates** | ✓ | ✓ |
-| **AI provider** | Bring your own key | Included, no config needed |
-| | [Get Started](https://buy.stripe.com/bJeeVc67v9S42AFeWj4c800) | [Get Started](https://buy.stripe.com/dRmbJ0cvT2pC2AF6pN4c801) |
-
-</div>
-
-Self-hosted will always be free and open source.
-
----
-
-## Documentation
-
-- [Documentation Home](https://jobops.dakheera47.com/docs/)
-- [Self-Hosting Guide](https://jobops.dakheera47.com/docs/getting-started/self-hosting)
-- [Feature Overview](https://jobops.dakheera47.com/docs/features/overview)
-- [Orchestrator Pipeline](https://jobops.dakheera47.com/docs/features/orchestrator)
-- [Extractor System](https://jobops.dakheera47.com/docs/extractors/overview)
-- [Troubleshooting](https://jobops.dakheera47.com/docs/troubleshooting/common-problems)
-
----
+- JobOps does not auto-apply to jobs
+- Many integrations are optional and only need configuration if you plan to use them
+- The repository includes extra docs and tooling, but the core runtime apps are `orchestrator/` and `ai-interview-simulator/`
 
 ## Contributing
 
-Contributions are welcome. Whether it's code, docs, or new extractors, start with [`CONTRIBUTING.md`](./CONTRIBUTING.md).
-
-<a href="https://github.com/DaKheera47/job-ops/graphs/contributors">
-  <img src="https://contrib.rocks/image?repo=DaKheera47/job-ops" />
-</a>
-
----
-
-## Star History
-
-<div align="center">
-
-<a href="https://www.star-history.com/#DaKheera47/job-ops&type=date&legend=top-left">
-<picture>
-<source media="(prefers-color-scheme: dark)" srcset="https://api.star-history.com/svg?repos=DaKheera47/job-ops&type=date&theme=dark&legend=top-left" />
-<source media="(prefers-color-scheme: light)" srcset="https://api.star-history.com/svg?repos=DaKheera47/job-ops&type=date&legend=top-left" />
-<img alt="Star History Chart" src="https://api.star-history.com/svg?repos=DaKheera47/job-ops&type=date&legend=top-left" />
-</picture>
-</a>
-
-</div>
-
----
-
-## Analytics
-
-JobOps includes anonymous usage analytics (Umami) to help improve the product. To opt out, block `umami.dakheera47.com` in your firewall or DNS.
+See [CONTRIBUTING.md](./CONTRIBUTING.md).
 
 ## License
 
-**AGPLv3 + Commons Clause**
-
-You can self-host, use, and modify JobOps freely. You cannot sell the software itself or offer paid hosted services whose value substantially comes from JobOps. See [LICENSE](LICENSE).
-
----
-
-<div align="center">
-
-Built by [Shaheer Sarfaraz](https://github.com/DaKheera47)
-
-[Website](https://jobops.app) · [Cloud](https://jobops.app) · [Documentation](https://jobops.dakheera47.com/docs/) · [Ko-fi](https://ko-fi.com/shaheersarfaraz)
-
-</div>
+See [LICENSE](./LICENSE).
