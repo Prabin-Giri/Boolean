@@ -1,0 +1,152 @@
+[
+  {
+    "id": 1,
+    "category": "hr",
+    "difficulty": "easy",
+    "text": "Tell me about yourself."
+  },
+  {
+    "id": 2,
+    "category": "hr",
+    "difficulty": "easy",
+    "text": "Why do you want to work here?"
+  },
+  {
+    "id": 3,
+    "category": "hr",
+    "difficulty": "medium",
+    "text": "What is one weakness you are actively working on?"
+  },
+  {
+    "id": 4,
+    "category": "hr",
+    "difficulty": "medium",
+    "text": "Describe a time you had to adapt quickly to change."
+  },
+  {
+    "id": 5,
+    "category": "behavioral",
+    "difficulty": "easy",
+    "text": "Describe a challenge you overcame in a team project."
+  },
+  {
+    "id": 6,
+    "category": "behavioral",
+    "difficulty": "easy",
+    "text": "Tell me about a time you handled conflict in a team."
+  },
+  {
+    "id": 7,
+    "category": "behavioral",
+    "difficulty": "medium",
+    "text": "Tell me about a time you failed and what you learned."
+  },
+  {
+    "id": 8,
+    "category": "behavioral",
+    "difficulty": "medium",
+    "text": "Describe a time you had to lead without formal authority."
+  },
+  {
+    "id": 9,
+    "category": "technical",
+    "difficulty": "easy",
+    "text": "What is the difference between a stack and a queue?"
+  },
+  {
+    "id": 10,
+    "category": "technical",
+    "difficulty": "easy",
+    "text": "Explain what an API is in simple terms."
+  },
+  {
+    "id": 11,
+    "category": "technical",
+    "difficulty": "medium",
+    "text": "What is the difference between SQL and NoSQL databases?"
+  },
+  {
+    "id": 12,
+    "category": "technical",
+    "difficulty": "medium",
+    "text": "Explain REST versus GraphQL and when you might choose each."
+  },
+  {
+    "id": 13,
+    "category": "technical",
+    "difficulty": "hard",
+    "text": "How would you design a scalable interview feedback platform?"
+  },
+  {
+    "id": 14,
+    "category": "behavioral",
+    "difficulty": "hard",
+    "text": "Tell me about a time you made a difficult decision with incomplete information."
+  },
+  {
+    "id": 15,
+    "category": "hr",
+    "difficulty": "hard",
+    "text": "Where do you see yourself in five years, and how does this role fit that path?"
+  },
+  {
+    "category": "behavioral",
+    "difficulty": "easy",
+    "text": "Tell me about a time you helped a teammate who was struggling."
+  },
+  {
+    "category": "behavioral",
+    "difficulty": "medium",
+    "text": "Describe a time you had to adapt quickly when a plan changed unexpectedly."
+  },
+  {
+    "category": "behavioral",
+    "difficulty": "hard",
+    "text": "Tell me about a time you received tough feedback and had to change your approach."
+  },
+  {
+    "category": "behavioral",
+    "difficulty": "hard",
+    "text": "Describe a conflict with a teammate and how you handled it without hurting the relationship."
+  },
+  {
+    "category": "technical",
+    "difficulty": "easy",
+    "text": "Explain a project where you used technology to solve a practical problem."
+  },
+  {
+    "category": "technical",
+    "difficulty": "medium",
+    "text": "How would you debug a feature that works locally but fails in production?"
+  },
+  {
+    "category": "technical",
+    "difficulty": "hard",
+    "text": "Design a system that can handle interview recordings, transcripts, and scoring at scale."
+  },
+  {
+    "category": "technical",
+    "difficulty": "hard",
+    "text": "How would you improve the reliability of a real-time video analysis pipeline?"
+  },
+  {
+    "category": "hr",
+    "difficulty": "easy",
+    "text": "Why do you want to work in this type of role?"
+  },
+  {
+    "category": "hr",
+    "difficulty": "medium",
+    "text": "What kind of work environment helps you perform at your best?"
+  },
+  {
+    "category": "hr",
+    "difficulty": "hard",
+    "text": "How would you respond if you strongly disagreed with a manager's decision?"
+  },
+  {
+    "category": "hr",
+    "difficulty": "hard",
+    "text": "What would you do if you realized you had made a serious mistake on an important project?"
+  }
+]

@@ -1,24 +1,29 @@
 # Environment files
 .env
 *.env.local
+**/.env
 
 # Dependencies
 node_modules/
 **/node_modules/
-**/.package-lock.json
-**/.docusaurus/
-docs-site/.docusaurus/
-docs-site/build/
 
-# Data directory (bind mount in Docker)
-data/
+# Frontend build output
+**/dist/
 
-# Extractor storage outputs and cached auth
-extractors/ukvisajobs/storage/
+# Python cache and virtualenvs
+**/__pycache__/
+**/*.pyc
+**/.venv/
+**/venv/
+
+# Local app data
+ai-interview-simulator/backend/interview_simulator.db
+ai-interview-simulator/backend/app/uploads/
+ai-interview-simulator/backend/app/results/
 
 # OS files
 .DS_Store
 Thumbs.db
 
-# local temp artifacts
+# Temp artifacts
 tmp/
